@@ -45,6 +45,7 @@ for job_link in job_links:
         temp = job_link.get_attribute("data-job-id")
         jobID = temp.split(":")[-1]
         IDs.append(int(jobID))
+        
 
 print(IDs)
 
