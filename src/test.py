@@ -29,7 +29,10 @@ driver = webdriver.Chrome(service=service, options=options)
 def human_scroll(element, pause_range=(0.5, 1.2), steps=10):
     """Scroll down an element gradually to simulate human behavior."""
     for _ in range(steps):
-        driver.execute_script("arguments[0].scrollTop += arguments[0].offsetHeight / arguments[1];", element, steps)
+        driver.execute_script(
+            "arguments[0].scrollTop += arguments[0].offsetHeight / arguments[1];",
+            element, steps
+        )
         time.sleep(random.uniform(*pause_range))
 
 try:
@@ -58,8 +61,8 @@ try:
     results_text = results_div.text.strip()
     results_number = int("".join(ch for ch in results_text if ch.isdigit()))
     print(f"Total results: {results_number}")
-
-    total_pages = (100 // 25) + 1
+    max = 0
+    total_pages = (max // 25) + 1  # adjust max if needed
     print(f"Total pages: {total_pages}")
 
     job_ids = []
@@ -70,15 +73,12 @@ try:
         print(f"Visiting page {page+1}/{total_pages}: {url}")
         driver.get(url)
 
-        # Wait for the jobs list <ul>
         job_list_ul = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//ul[li[@data-occludable-job-id]]"))
         )
 
-        # Scroll gradually to load all jobs
         human_scroll(job_list_ul, steps=8)
 
-        # Collect job IDs
         job_items = job_list_ul.find_elements(By.CSS_SELECTOR, "li[data-occludable-job-id]")
         print(f"Collected job items: ({len(job_items)})")
 
@@ -91,8 +91,6 @@ try:
                 print(f"Skipping a stale job item: {e}")
 
         print(f"Collected job IDs so far ({len(job_ids)}): {job_ids}")
-
-        # Random human-like wait before next page
         time.sleep(random.uniform(3, 7))
 
     print(f"Final collected job IDs ({len(job_ids)}): {job_ids}")
@@ -103,7 +101,6 @@ try:
         print(f"Opening job: {job_url}")
         driver.get(job_url)
 
-        # Simulate a hover before clicking
         try:
             easy_apply_btn = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.ID, "jobs-apply-button-id"))
@@ -112,19 +109,37 @@ try:
             time.sleep(random.uniform(1, 2))
             print(f"Clicking Easy Apply for job {job_id}")
             easy_apply_btn.click()
-            time.sleep(random.uniform(2.5, 4.5))
-            # Click the "Next" button
-            try:
-                next_btn = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-easy-apply-next-button]"))
-                )
-                print("Clicking Next button...")
-                next_btn.click()
-                time.sleep(random.uniform(1.5, 3))  # small human-like pause
-            except Exception as e:
-                print(f"Next button not found or clickable: {e}")
+            time.sleep(random.uniform(2, 4))
 
-            # Click the "Submit application" button
+            # Loop through "Next" until "Review" is found
+            while True:
+                try:
+                    review_btn = driver.find_element(By.CSS_SELECTOR, "button[data-live-test-easy-apply-review-button]")
+                    print("Review button found, breaking loop...")
+                    break  # Exit loop when review button is present
+                except:
+                    try:
+                        next_btn = driver.find_element(By.CSS_SELECTOR, "button[data-easy-apply-next-button]")
+                        print("Clicking Next button...")
+                        next_btn.click()
+                        time.sleep(random.uniform(1.5, 3))
+                    except:
+                        print("No more Next button, moving to next job.")
+                        break
+
+            # Click the "Follow Company" checkbox if present
+            try:
+                follow_checkbox = WebDriverWait(driver, 2).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "label[for='follow-company-checkbox']"))
+                )
+                driver.execute_script("arguments[0].scrollIntoView(true);", follow_checkbox)
+                follow_checkbox.click()
+                print("Clicked follow company checkbox.")
+                time.sleep(random.uniform(0.5, 1.5))
+            except:
+                print("Follow company checkbox not found.")
+
+            # Click the "Submit" button
             try:
                 submit_btn = WebDriverWait(driver, 5).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-live-test-easy-apply-submit-button]"))
@@ -132,12 +147,12 @@ try:
                 print("Clicking Submit button...")
                 submit_btn.click()
                 time.sleep(random.uniform(2, 4))
-            except Exception as e:
-                print(f"Submit button not found or clickable: {e}")
+            except:
+                print("Submit button not found or clickable.")
+
         except Exception as e:
             print(f"No Easy Apply button for job {job_id}: {e}")
 
-        # Random pause before next job
         time.sleep(random.uniform(3, 6))
 
 finally:
