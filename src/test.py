@@ -29,9 +29,7 @@ driver = webdriver.Chrome(service=service, options=options)
 def human_scroll(element, pause_range=(0.5, 1.2), steps=10):
     """Scroll down an element gradually to simulate human behavior."""
     for _ in range(steps):
-        driver.execute_script(
-            "arguments[0].scrollTop += arguments[0].offsetHeight / arguments[1];", element, steps
-        )
+        driver.execute_script("arguments[0].scrollTop += arguments[0].offsetHeight / arguments[1];", element, steps)
         time.sleep(random.uniform(*pause_range))
 
 try:
@@ -41,10 +39,7 @@ try:
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "username")))
     print("Entering username...")
     driver.find_element(By.ID, "username").send_keys(linkedin_username)
-
-    print("Entering password...")
     driver.find_element(By.ID, "password").send_keys(linkedin_password)
-
     driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
     print("Navigating to job search page...")
@@ -60,8 +55,9 @@ try:
     results_text = results_div.text.strip()
     results_number = int("".join(ch for ch in results_text if ch.isdigit()))
     print(f"Total results: {results_number}")
-    max_results = 1  # For demo limit
-    total_pages = (max_results // 25) + 1
+
+    max = 1
+    total_pages = (max // 25) + 1  # For demo limit
     print(f"Total pages: {total_pages}")
 
     job_ids = []
@@ -72,17 +68,27 @@ try:
         print(f"Visiting page {page+1}/{total_pages}: {url}")
         driver.get(url)
 
+        # Wait for the jobs list <ul>
         job_list_ul = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.XPATH, "//ul[li[@data-occludable-job-id]]"))
         )
 
+        # Scroll gradually to load all jobs
         human_scroll(job_list_ul, steps=8)
 
+        # Collect job IDs
         job_items = job_list_ul.find_elements(By.CSS_SELECTOR, "li[data-occludable-job-id]")
         print(f"Collected job items: ({len(job_items)})")
 
         for job_item in job_items:
             try:
+                # Skip jobs with already applied message
+                applied_msg_elements = job_item.find_elements(By.CSS_SELECTOR, "span.artdeco-inline-feedback__message")
+                if applied_msg_elements:
+                    applied_text = applied_msg_elements[0].text.strip()
+                    print(f"Skipping job because of applied message: {applied_text}")
+                    continue
+
                 job_id_str = job_item.get_attribute("data-occludable-job-id")
                 if job_id_str and job_id_str.isdigit() and int(job_id_str) not in job_ids:
                     job_ids.append(int(job_id_str))
@@ -94,24 +100,24 @@ try:
 
     print(f"Final collected job IDs ({len(job_ids)}): {job_ids}")
 
-    # --- Easy Apply Loop ---
+    # Visit each job page and click Easy Apply if available
     for job_id in job_ids:
         job_url = f"https://www.linkedin.com/jobs/view/{job_id}"
         print(f"Opening job: {job_url}")
         driver.get(job_url)
+        time.sleep(random.uniform(1.5, 3))
 
-        driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(random.uniform(1, 2))
-
-        # Skip if already applied
+        # Skip if already submitted
         try:
-            submitted_elem = driver.find_element(By.XPATH, "//span[text()='Application submitted']")
-            print(f"Job {job_id} already submitted, skipping...")
-            continue
+            submitted_elem = driver.find_elements(By.CSS_SELECTOR, "span.full-width")
+            if submitted_elem and "Application submitted" in submitted_elem[0].text:
+                print(f"Skipping job {job_id} because application already submitted.")
+                continue
         except:
             pass
 
         try:
+            # Wait for Easy Apply container
             easy_apply_container = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.CLASS_NAME, "jobs-apply-button--top-card"))
             )
@@ -119,85 +125,77 @@ try:
             driver.execute_script("arguments[0].scrollIntoView(true);", easy_apply_btn)
             ActionChains(driver).move_to_element(easy_apply_btn).perform()
             time.sleep(random.uniform(1, 2))
-
             print(f"Clicking Easy Apply for job {job_id}")
-            try:
-                easy_apply_btn.click()
-            except:
-                driver.execute_script("arguments[0].click();", easy_apply_btn)
+            easy_apply_btn.click()
             time.sleep(random.uniform(2, 4))
 
-            # Loop Next until Review or validation errors
-            skip_job = False
+            # Loop through Next until Review appears or validation errors appear
             while True:
                 # Check for validation errors
-                feedback_elements = driver.find_elements(By.CSS_SELECTOR, "span.artdeco-inline-feedback__message")
-                if feedback_elements:
-                    print(f"Job {job_id} has validation errors, skipping...")
-                    for fb in feedback_elements:
-                        feedback_text = fb.text.strip()
-                        parent_label = fb.find_element(By.XPATH, "ancestor::div[@data-test-form-element]//label")
-                        print(f"  - Field: {parent_label.text.strip() if parent_label else 'Unknown'}")
-                        print(f"    Validation: {feedback_text}")
-                    skip_job = True
-                    break
+                validation_errors = driver.find_elements(By.CSS_SELECTOR, "span.artdeco-inline-feedback__message")
+                if validation_errors:
+                    print(f"Validation errors detected for job {job_id}:")
+                    for err in validation_errors:
+                        print(f" - {err.text.strip()}")
+                    print(f"Skipping job {job_id} due to validation errors.")
+                    break  # skip to next job
 
-                # Check for Review button
-                try:
-                    review_btn = driver.find_element(
-                        By.CSS_SELECTOR, "button[data-live-test-easy-apply-review-button]"
-                    )
-                    print("Review button found, clicking it...")
-                    driver.execute_script("arguments[0].scrollIntoView(true);", review_btn)
-                    ActionChains(driver).move_to_element(review_btn).perform()
-                    time.sleep(random.uniform(1, 2))
+                # Check if Review button exists
+                review_btns = driver.find_elements(By.CSS_SELECTOR, "button[data-live-test-easy-apply-review-button]")
+                if review_btns:
+                    review_btn = review_btns[0]
+                    print("Clicking Review button...")
                     review_btn.click()
-                    time.sleep(random.uniform(2, 4))
-                    break
-                except:
-                    # Click Next if present
-                    try:
-                        next_btn = driver.find_element(By.CSS_SELECTOR, "button[data-easy-apply-next-button]")
+                    time.sleep(random.uniform(1.5, 3))
+
+                    # Check again for validation errors after Review
+                    validation_errors_after_review = driver.find_elements(By.CSS_SELECTOR, "span.artdeco-inline-feedback__message")
+                    if validation_errors_after_review:
+                        print(f"Validation errors detected after Review for job {job_id}:")
+                        for err in validation_errors_after_review:
+                            print(f" - {err.text.strip()}")
+                        print(f"Skipping job {job_id} due to validation errors after Review.")
+                        break  # skip to next job
+                    else:
+                        # Click Follow Company checkbox if present
+                        try:
+                            follow_checkbox = WebDriverWait(driver, 2).until(
+                                EC.presence_of_element_located((By.CSS_SELECTOR, "label[for='follow-company-checkbox']"))
+                            )
+                            driver.execute_script("arguments[0].scrollIntoView(true);", follow_checkbox)
+                            follow_checkbox.click()
+                            print("Clicked follow company checkbox.")
+                            time.sleep(random.uniform(0.5, 1.5))
+                        except:
+                            print("Follow company checkbox not found.")
+
+                        # Click Submit
+                        try:
+                            submit_btn = WebDriverWait(driver, 5).until(
+                                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-live-test-easy-apply-submit-button]"))
+                            )
+                            print("Clicking Submit button...")
+                            submit_btn.click()
+                            print(f"Job {job_id} submitted successfully!")
+                            time.sleep(random.uniform(2, 4))
+                        except:
+                            print(f"Submit button not found or clickable for job {job_id}.")
+                        break  # done with this job
+
+                else:
+                    # Try clicking Next if available
+                    next_btns = driver.find_elements(By.CSS_SELECTOR, "button[data-easy-apply-next-button]")
+                    if next_btns:
+                        next_btn = next_btns[0]
                         print("Clicking Next button...")
-                        driver.execute_script("arguments[0].scrollIntoView(true);", next_btn)
-                        ActionChains(driver).move_to_element(next_btn).perform()
-                        time.sleep(random.uniform(1, 2))
                         next_btn.click()
                         time.sleep(random.uniform(1.5, 3))
-                    except:
-                        print("No more Next button and no Review button, moving to next job.")
-                        skip_job = True
+                    else:
+                        print("No more Next button and Review not found, moving to next job.")
                         break
 
-            if skip_job:
-                continue  # Go to next job_id immediately
-
-            # Follow company checkbox
-            try:
-                follow_checkbox = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "label[for='follow-company-checkbox']"))
-                )
-                driver.execute_script("arguments[0].scrollIntoView(true);", follow_checkbox)
-                follow_checkbox.click()
-                print("Clicked follow company checkbox.")
-                time.sleep(random.uniform(0.5, 1.5))
-            except:
-                print("Follow company checkbox not found.")
-
-            # Submit button
-            try:
-                submit_btn = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-live-test-easy-apply-submit-button]"))
-                )
-                print("Clicking Submit button...")
-                submit_btn.click()
-                print(f"Job {job_id} submitted successfully!")
-                time.sleep(random.uniform(2, 4))
-            except:
-                print("Submit button not found or clickable.")
-
         except Exception as e:
-            print(f"No Easy Apply button for job {job_id}: {e}")
+            print(f"No Easy Apply button for job {job_id} or other error: {e}")
 
         time.sleep(random.uniform(3, 6))
 
