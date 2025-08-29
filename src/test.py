@@ -100,7 +100,6 @@ try:
         print(f"Opening job: {job_url}")
         driver.get(job_url)
 
-        # Scroll to top to avoid click interception
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(random.uniform(1, 2))
 
@@ -129,6 +128,7 @@ try:
             time.sleep(random.uniform(2, 4))
 
             # Loop Next until Review or validation errors
+            skip_job = False
             while True:
                 # Check for validation errors
                 feedback_elements = driver.find_elements(By.CSS_SELECTOR, "span.artdeco-inline-feedback__message")
@@ -136,7 +136,10 @@ try:
                     print(f"Job {job_id} has validation errors, skipping...")
                     for fb in feedback_elements:
                         feedback_text = fb.text.strip()
-                        print(f"  - Validation: {feedback_text}")
+                        parent_label = fb.find_element(By.XPATH, "ancestor::div[@data-test-form-element]//label")
+                        print(f"  - Field: {parent_label.text.strip() if parent_label else 'Unknown'}")
+                        print(f"    Validation: {feedback_text}")
+                    skip_job = True
                     break
 
                 # Check for Review button
@@ -163,7 +166,11 @@ try:
                         time.sleep(random.uniform(1.5, 3))
                     except:
                         print("No more Next button and no Review button, moving to next job.")
+                        skip_job = True
                         break
+
+            if skip_job:
+                continue  # Go to next job_id immediately
 
             # Follow company checkbox
             try:
