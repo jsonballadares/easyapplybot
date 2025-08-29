@@ -103,6 +103,18 @@ try:
         print(f"Opening job: {job_url}")
         driver.get(job_url)
 
+        # Scroll to top to avoid click interception
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(random.uniform(1, 2))
+
+        # Check if application already submitted
+        try:
+            submitted_elem = driver.find_element(By.XPATH, "//span[text()='Application submitted']")
+            print(f"Job {job_id} already submitted, skipping...")
+            continue
+        except:
+            pass
+
         try:
             # Wait for Easy Apply container
             easy_apply_container = WebDriverWait(driver, 5).until(
@@ -118,7 +130,6 @@ try:
             try:
                 easy_apply_btn.click()
             except:
-                # fallback to JS click
                 driver.execute_script("arguments[0].click();", easy_apply_btn)
             time.sleep(random.uniform(2, 4))
 
