@@ -29,7 +29,9 @@ driver = webdriver.Chrome(service=service, options=options)
 def human_scroll(element, pause_range=(0.5, 1.2), steps=10):
     """Scroll down an element gradually to simulate human behavior."""
     for _ in range(steps):
-        driver.execute_script("arguments[0].scrollTop += arguments[0].offsetHeight / arguments[1];", element, steps)
+        driver.execute_script(
+            "arguments[0].scrollTop += arguments[0].offsetHeight / arguments[1];", element, steps
+        )
         time.sleep(random.uniform(*pause_range))
 
 try:
@@ -58,8 +60,8 @@ try:
     results_text = results_div.text.strip()
     results_number = int("".join(ch for ch in results_text if ch.isdigit()))
     print(f"Total results: {results_number}")
-    max_results = 1  # For demo limit
-    total_pages = (max_results // 25) + 1
+    max = 1
+    total_pages = (max // 25) + 1  # For demo limit
     print(f"Total pages: {total_pages}")
 
     job_ids = []
@@ -106,35 +108,42 @@ try:
             easy_apply_container = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.CLASS_NAME, "jobs-apply-button--top-card"))
             )
-            easy_apply_btn = easy_apply_container.find_element(By.ID, "jobs-apply-button-id")
 
-            # Scroll into view and attempt click with retries
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", easy_apply_btn)
+            easy_apply_btn = easy_apply_container.find_element(By.ID, "jobs-apply-button-id")
+            driver.execute_script("arguments[0].scrollIntoView(true);", easy_apply_btn)
             ActionChains(driver).move_to_element(easy_apply_btn).perform()
             time.sleep(random.uniform(1, 2))
 
-            clicked = False
-            for attempt in range(3):
-                try:
-                    print(f"Clicking Easy Apply for job {job_id}, attempt {attempt+1}")
-                    easy_apply_btn.click()
-                    clicked = True
-                    break
-                except Exception as e:
-                    print(f"Click intercepted, retrying... ({e})")
-                    time.sleep(random.uniform(1, 2))
-                    driver.execute_script("window.scrollBy(0, -50);")  # small scroll adjustment
-
-            if not clicked:
-                print(f"Failed to click Easy Apply for job {job_id}, moving on.")
-                continue
-
+            print(f"Clicking Easy Apply for job {job_id}")
+            try:
+                easy_apply_btn.click()
+            except:
+                # fallback to JS click
+                driver.execute_script("arguments[0].click();", easy_apply_btn)
             time.sleep(random.uniform(2, 4))
 
             # Loop through Next until Review appears
             while True:
+                # Check for validation errors / feedback messages
+                feedback_elements = driver.find_elements(By.CSS_SELECTOR, "span.artdeco-inline-feedback__message")
+                if feedback_elements:
+                    print(f"Found {len(feedback_elements)} validation errors, skipping Next for now.")
+                    for fb in feedback_elements:
+                        try:
+                            question_label = fb.find_element(
+                                By.XPATH, "./ancestor::div[contains(@class,'fb-dash-form-element')]//label"
+                            )
+                            question_text = question_label.text.strip()
+                        except:
+                            question_text = "Unknown question"
+                        feedback_text = fb.text.strip()
+                        print(f"  - Question: {question_text} | Feedback: {feedback_text}")
+                    break
+
                 try:
-                    review_btn = driver.find_element(By.CSS_SELECTOR, "button[data-live-test-easy-apply-review-button]")
+                    review_btn = driver.find_element(
+                        By.CSS_SELECTOR, "button[data-live-test-easy-apply-review-button]"
+                    )
                     print("Review button found, clicking it...")
                     driver.execute_script("arguments[0].scrollIntoView(true);", review_btn)
                     ActionChains(driver).move_to_element(review_btn).perform()
@@ -172,14 +181,12 @@ try:
                 submit_btn = WebDriverWait(driver, 5).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-live-test-easy-apply-submit-button]"))
                 )
-                driver.execute_script("arguments[0].scrollIntoView(true);", submit_btn)
-                ActionChains(driver).move_to_element(submit_btn).perform()
-                time.sleep(random.uniform(1, 2))
+                print("Clicking Submit button...")
                 submit_btn.click()
-                print(f"Submit button clicked for job {job_id}!")  # <-- log added
+                print(f"Job {job_id} submitted successfully!")
                 time.sleep(random.uniform(2, 4))
             except:
-                print(f"Submit button not found or clickable for job {job_id}.")
+                print("Submit button not found or clickable.")
 
         except Exception as e:
             print(f"No Easy Apply button for job {job_id}: {e}")
